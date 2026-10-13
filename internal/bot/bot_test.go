@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -853,5 +854,60 @@ func TestAckTextMatching(t *testing.T) {
 		if got := b.isAckText(text); got != want {
 			t.Errorf("isAckText(%q)=%v want %v", text, got, want)
 		}
+	}
+}
+
+func TestFileShareMentionArms(t *testing.T) {
+	// Real miss (2026-10-13): on-call tagged in a thread reply with a screenshot
+	// attached arrives as subtype "file_share" and was dropped.
+	b, st := newTestBot(t, &fakePoster{}, canAck())
+	b.HandleMessage(context.Background(), &slackapi.MessageEvent{
+		User: "U_DEV", Text: triggerText, Channel: "C1", TS: "200.2", ThreadTS: "200.0", Subtype: "file_share",
+	})
+	if n := armed(t, st); n != 1 {
+		t.Fatalf("file_share mention did not arm: %d", n)
+	}
+}
+
+func TestNoiseSubtypeStillSkipped(t *testing.T) {
+	b, st := newTestBot(t, &fakePoster{}, canAck())
+	for _, sub := range []string{"message_changed", "message_deleted", "channel_join", "bot_message"} {
+		b.HandleMessage(context.Background(), &slackapi.MessageEvent{
+			User: "U_DEV", Text: triggerText, Channel: "C1", TS: "300.1", Subtype: sub,
+		})
+	}
+	if n := armed(t, st); n != 0 {
+		t.Fatalf("noise subtype armed: %d", n)
+	}
+}
+
+func TestReconcileArmsMissedThreadReplyTrigger(t *testing.T) {
+	// The mention is a reply, so conversations.history only shows the root;
+	// reconcile must read the thread to find it.
+	now := time.Now()
+	root := strconv.FormatInt(now.Add(-2*time.Minute).Unix(), 10) + ".000100"
+	reply := strconv.FormatInt(now.Add(-1*time.Minute).Unix(), 10) + ".000200"
+	post := &fakePoster{
+		history: map[string][]slackapi.HistMessage{
+			"C1": {{Type: "message", BotID: "B_FORM", Text: "Unable to access stage", TS: root, ReplyCount: 2, LatestReply: reply}},
+		},
+		replies: map[string][]slackapi.HistMessage{
+			"C1|" + root: {
+				{Type: "message", BotID: "B_FORM", Text: "Unable to access stage", TS: root},
+				{Type: "message", User: "U_DEV", Text: triggerText, TS: reply, ThreadTS: root, Subtype: "file_share"},
+			},
+		},
+	}
+	b, st := newTestBot(t, post, canAck())
+	b.setNow(func() time.Time { return now })
+	b.markSeen("C1")
+
+	b.reconcile(context.Background())
+	if n := armed(t, st); n != 1 {
+		t.Fatalf("reconcile missed the thread-reply trigger: armed=%d", n)
+	}
+	b.reconcile(context.Background())
+	if n := armed(t, st); n != 1 {
+		t.Fatalf("reconcile double-armed: %d", n)
 	}
 }

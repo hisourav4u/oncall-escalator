@@ -76,8 +76,8 @@ func (s *Store) migrate() error {
 	// Additive metrics columns (idempotent).
 	for _, col := range []string{
 		"acked_at INTEGER",
-		"ack_via TEXT NOT NULL DEFAULT ''",       // keyword | reaction
-		"acker_kind TEXT NOT NULL DEFAULT ''",    // oncall | responder
+		"ack_via TEXT NOT NULL DEFAULT ''",    // keyword | reaction
+		"acker_kind TEXT NOT NULL DEFAULT ''", // oncall | responder
 		"escalated_at INTEGER",
 		"oncall_reply_by TEXT NOT NULL DEFAULT ''",
 		"oncall_reply_at INTEGER",

@@ -66,20 +66,20 @@ func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"window":                label,
-		"total_tags":            m.TotalTags,
-		"acknowledged":          m.Acknowledged,
-		"escalated":             m.Escalated,
-		"open":                  m.Open,
-		"ack_rate":              round2(rate(m.Acknowledged)),
-		"escalation_rate":       round2(rate(m.Escalated)),
-		"acked_by_oncall":       m.AckedByOncall,
-		"acked_by_other":        m.AckedByOther,
-		"late_acked":            m.LateAcked,
-		"oncall_engaged":        m.OncallEngaged,
-		"oncall_engaged_rate":   round2(rate(m.OncallEngaged)),
-		"time_to_ack_seconds":   map[string]int{"median": median, "avg": avg, "p90": p90},
-		"acks_by_person":        byActer,
+		"window":              label,
+		"total_tags":          m.TotalTags,
+		"acknowledged":        m.Acknowledged,
+		"escalated":           m.Escalated,
+		"open":                m.Open,
+		"ack_rate":            round2(rate(m.Acknowledged)),
+		"escalation_rate":     round2(rate(m.Escalated)),
+		"acked_by_oncall":     m.AckedByOncall,
+		"acked_by_other":      m.AckedByOther,
+		"late_acked":          m.LateAcked,
+		"oncall_engaged":      m.OncallEngaged,
+		"oncall_engaged_rate": round2(rate(m.OncallEngaged)),
+		"time_to_ack_seconds": map[string]int{"median": median, "avg": avg, "p90": p90},
+		"acks_by_person":      byActer,
 	})
 }
 

@@ -107,14 +107,16 @@ func (c *Client) IsBot(ctx context.Context, userID string) (bool, error) {
 // HistMessage is a message as returned by history/replies reads, including any
 // reactions (used by the reconciliation safety net).
 type HistMessage struct {
-	Type      string `json:"type"`
-	Subtype   string `json:"subtype"`
-	User      string `json:"user"`
-	BotID     string `json:"bot_id"`
-	Text      string `json:"text"`
-	TS        string `json:"ts"`
-	ThreadTS  string `json:"thread_ts"`
-	Reactions []struct {
+	Type        string `json:"type"`
+	Subtype     string `json:"subtype"`
+	User        string `json:"user"`
+	BotID       string `json:"bot_id"`
+	Text        string `json:"text"`
+	TS          string `json:"ts"`
+	ThreadTS    string `json:"thread_ts"`
+	ReplyCount  int    `json:"reply_count"`
+	LatestReply string `json:"latest_reply"`
+	Reactions   []struct {
 		Name  string   `json:"name"`
 		Users []string `json:"users"`
 	} `json:"reactions"`
@@ -162,7 +164,7 @@ func (c *Client) UsergroupMembers(ctx context.Context, usergroupID string) ([]st
 		Users []string `json:"users"`
 	}
 	if err := c.get(ctx, "usergroups.users.list", url.Values{
-		"usergroup":       {usergroupID},
+		"usergroup":        {usergroupID},
 		"include_disabled": {"false"},
 	}, &out); err != nil {
 		return nil, err

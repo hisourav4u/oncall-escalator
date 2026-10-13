@@ -2,6 +2,8 @@ package bot
 
 import (
 	"context"
+
+	"escalator/internal/slackapi"
 	"strconv"
 	"strings"
 	"time"
@@ -45,27 +47,29 @@ func (b *Bot) reconcile(ctx context.Context) {
 			b.log.Error("reconcile: history fetch failed", "channel", ch, "err", err)
 			continue
 		}
-		// (a) Back-fill missed triggers.
+		// (a) Back-fill missed triggers: top-level messages, plus replies in any
+		// thread with activity inside the window. conversations.history only
+		// returns thread roots, so a mention posted as a thread reply would
+		// otherwise be invisible to the safety net.
 		for i := range msgs {
-			m := msgs[i]
-			if m.BotID != "" || m.User == "" {
-				continue
+			b.reconcileTrigger(ctx, ch, msgs[i])
+			if msgs[i].ReplyCount > 0 && !tsAfter(oldest, msgs[i].LatestReply) {
+				replies, err := b.notify.ThreadReplies(ctx, ch, msgs[i].TS)
+				if err != nil {
+					b.log.Error("reconcile: replies fetch failed", "channel", ch, "thread", msgs[i].TS, "err", err)
+					continue
+				}
+				for j := range replies {
+					r := replies[j]
+					if r.TS == msgs[i].TS || tsAfter(oldest, r.TS) {
+						continue // root already handled; reply older than the window
+					}
+					if r.ThreadTS == "" {
+						r.ThreadTS = msgs[i].TS
+					}
+					b.reconcileTrigger(ctx, ch, r)
+				}
 			}
-			if m.Subtype != "" && m.Subtype != "thread_broadcast" {
-				continue
-			}
-			if !b.isTrigger(m.Text) {
-				continue
-			}
-			exists, err := b.store.ExistsByTrigger(ctx, ch, m.TS)
-			if err != nil {
-				b.log.Error("reconcile: exists check failed", "err", err)
-				continue
-			}
-			if exists {
-				continue
-			}
-			b.tryArm(ctx, ch, m.TS, m.ThreadTS, m.Text, m.User, tsToTime(m.TS), "reconcile")
 		}
 		// (b) Catch missed acks on still-open escalations.
 		open, err := b.store.ListOpen(ctx, ch)
@@ -77,6 +81,25 @@ func (b *Bot) reconcile(ctx context.Context) {
 			b.reconcileAck(ctx, open[i].Channel, open[i].TriggerTS, open[i].ThreadTS)
 		}
 	}
+}
+
+// reconcileTrigger arms an escalation for a missed on-call mention.
+func (b *Bot) reconcileTrigger(ctx context.Context, ch string, m slackapi.HistMessage) {
+	if m.BotID != "" || m.User == "" {
+		return
+	}
+	if !triggerableSubtype(m.Subtype) || !b.isTrigger(m.Text) {
+		return
+	}
+	exists, err := b.store.ExistsByTrigger(ctx, ch, m.TS)
+	if err != nil {
+		b.log.Error("reconcile: exists check failed", "err", err)
+		return
+	}
+	if exists {
+		return
+	}
+	b.tryArm(ctx, ch, m.TS, m.ThreadTS, m.Text, m.User, tsToTime(m.TS), "reconcile")
 }
 
 // reconcileAck re-reads a thread and acks the escalation if a valid ack signal

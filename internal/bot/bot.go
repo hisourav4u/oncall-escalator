@@ -108,7 +108,7 @@ func (b *Bot) HandleMessage(ctx context.Context, m *slackapi.MessageEvent) {
 	if m.BotID != "" || m.User == "" {
 		return
 	}
-	if m.Subtype != "" && m.Subtype != "thread_broadcast" {
+	if !triggerableSubtype(m.Subtype) {
 		if b.isTrigger(m.Text) {
 			b.log.Info("mention skipped: message subtype", "channel", m.Channel, "ts", m.TS, "subtype", m.Subtype)
 		}
@@ -505,4 +505,17 @@ func itoa(n int) string {
 		buf[i] = '-'
 	}
 	return string(buf[i:])
+}
+
+// triggerableSubtype reports whether a message with this subtype carries user
+// content that may contain an on-call mention. Plain messages have no subtype;
+// a mention with an attached file/screenshot arrives as "file_share" and a
+// reply also sent to the channel as "thread_broadcast". Everything else
+// (edits, deletes, joins, bot/system messages) is noise.
+func triggerableSubtype(subtype string) bool {
+	switch subtype {
+	case "", "thread_broadcast", "file_share", "me_message":
+		return true
+	}
+	return false
 }
